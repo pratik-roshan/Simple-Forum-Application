@@ -1,5 +1,6 @@
 from flask import Flask
 from flask_smorest import Api
+from flask_migrate import Migrate
 
 from dotenv import load_dotenv
 import os
@@ -32,6 +33,7 @@ def create_app():
     app.config['JWT_REFRESH_TOKEN_TIME'] = os.environ.get('JWT_REFRESH_TOKEN_EXPIRES')
     
     db.init_app(app)
+    migrate = Migrate(app, db)
     
     with app.app_context():
         db.create_all()

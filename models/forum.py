@@ -1,8 +1,15 @@
 from db import db
+from models.users import User
 
 post_tag = db.Table('post_tag',
     db.Column('post_id', db.Integer, db.ForeignKey('post.id'), primary_key=True),
     db.Column('tag_id', db.Integer, db.ForeignKey('tag.id'), primary_key=True)
+)
+
+post_likes = db.Table(
+    'post_likes',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('post_id', db.Integer, db.ForeignKey('post.id'), primary_key=True)
 )
 
 class Post(db.Model):
@@ -12,8 +19,11 @@ class Post(db.Model):
     content = db.Column(db.Text, nullable=False)
     view_count = db.Column(db.Integer, default=0)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
+    likes = db.Column(db.Integer, default=0)
+
     category = db.relationship('Category', backref=db.backref('posts', lazy=True))
     tags = db.relationship('Tag', secondary=post_tag, back_populates='posts', lazy='dynamic', cascade='all, delete')
+    liked_by = db.relationship('User', secondary=post_likes, backref='liked_posts')
 
     def serialize(self):
         return {
@@ -23,7 +33,9 @@ class Post(db.Model):
             'view_count': self.view_count,
             'category_id': self.category_id,
             'category_name': self.category.name if self.category else None,
-            'tags': [tag.name for tag in self.tags]
+            'tags': [tag.name for tag in self.tags],
+            'likes': self.likes,
+            'liked_by': [user.username for user in self.liked_by]
         }
 
 class Comment(db.Model):

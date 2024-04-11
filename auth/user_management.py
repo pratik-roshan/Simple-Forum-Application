@@ -4,12 +4,13 @@ from models import User, Role, Permission
 from db import db
 
 from flask_jwt_extended import jwt_required
-from decorators import auth_required_with_permission
+from decorators import auth_required_with_permission, role_required
 
 user_management_bp = Blueprint('user_management', __name__)
 
 @user_management_bp.route('/create_role', methods=['POST'])
-@auth_required_with_permission('create')
+@role_required('admin')
+# @auth_required_with_permission('create')
 def create_role():
     data = request.get_json()
     role_name = data.get('role_name')
@@ -26,7 +27,8 @@ def create_role():
     return {"message": "Role created successfully"}, 201
 
 @user_management_bp.route('/create_permission', methods=['POST'])
-@auth_required_with_permission('create')
+@role_required('admin')
+# @auth_required_with_permission('create')
 def create_permission():
     data = request.get_json()
     system_name = data.get('system_name')
@@ -71,10 +73,10 @@ def assign_role():
 def assign_permission():
     data = request.get_json()
     role_name = data.get('role_name')
-    permission_name = data.get('permission_name')
+    permission_name = data.get('system_name')
 
     role = Role.query.filter_by(role_name=role_name).first()
-    permission = Permission.query.filter_by(display_name=permission_name).first()
+    permission = Permission.query.filter_by(system_name=permission_name).first()
 
     if not role:
         if not permission:
