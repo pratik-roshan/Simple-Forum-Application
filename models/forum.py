@@ -20,9 +20,11 @@ class Post(db.Model):
     view_count = db.Column(db.Integer, default=0)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
     likes = db.Column(db.Integer, default=0)
+    creator_id = db.Column(db.Integer, db.ForeignKey('users.id'))
 
     category = db.relationship('Category', backref=db.backref('posts', lazy=True))
     tags = db.relationship('Tag', secondary=post_tag, back_populates='posts', lazy='dynamic', cascade='all, delete')
+    creator = db.relationship('User', backref='created_posts', foreign_keys=[creator_id])
     liked_by = db.relationship('User', secondary=post_likes, backref='liked_posts')
 
     def serialize(self):
@@ -34,6 +36,7 @@ class Post(db.Model):
             'category_id': self.category_id,
             'category_name': self.category.name if self.category else None,
             'tags': [tag.name for tag in self.tags],
+            'creator': self.creator.username if self.creator else None,
             'likes': self.likes,
             'liked_by': [user.username for user in self.liked_by]
         }

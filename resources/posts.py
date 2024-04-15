@@ -7,49 +7,59 @@ from models import Post, Tag, User, Category
 
 from decorators import auth_required_with_permission
 
-blp = Blueprint('Post', __name__, url_prefix="/forum")
+blp = Blueprint('Post', __name__, url_prefix="/api")
 
-@blp.route('/posts', methods=['GET', 'POST'])
+@blp.route('/posts', methods=['GET'])
+def get_posts():
+    category_id = request.args.get('category_id')
+    tag_names = request.args.getlist('tags')
+
+    # Filter posts by category and tags if provided
+    posts_query = Post.query
+
+    if category_id:
+        posts_query = posts_query.filter_by(category_id=category_id)
+
+    if tag_names:
+        posts_query = posts_query.join(Post.tags).filter(Tag.name.in_(tag_names))
+
+    posts = posts_query.all()
+    serialized_posts = [post.serialize() for post in posts]
+    return {'posts': serialized_posts}, 200
+    
+@blp.route('/posts', methods=['POST'])
 @jwt_required()
 def posts():
-    if request.method == 'GET':
-        category_id = request.args.get('category_id')
-        tag_names = request.args.getlist('tags')
+    data = request.json
+    tag_names = data.get('tags', [])
 
-        # Filter posts by category and tags if provided
-        posts_query = Post.query
+    current_user_username = get_jwt_identity()
 
-        if category_id:
-            posts_query = posts_query.filter_by(category_id=category_id)
-
-        if tag_names:
-            posts_query = posts_query.join(Post.tags).filter(Tag.name.in_(tag_names))
-
-        posts = posts_query.all()
-        serialized_posts = [post.serialize() for post in posts]
-        return {'posts': serialized_posts}, 200
+    # Retrieve the User object using the username
+    current_user = User.query.filter_by(username=current_user_username).first()
+    if current_user is None:
+        return {'message': 'User not found'}, 404
     
-    elif request.method == 'POST':
-        data = request.json
-        tag_names = data.get('tags', [])
-        
-        new_post = Post(title=data['title'], content=data['content'], category_id=data['category_id'])
-        
-        for tag_name in tag_names:
-            tag = Tag.query. filter_by(name=tag_name).first()
-            if tag is None:
-                tag = Tag(name=tag_name)
-            new_post.tags.append(tag)
+    new_post = Post(title=data['title'],
+                    content=data['content'],
+                    category_id=data['category_id'],
+                    creator = current_user)
+    
+    for tag_name in tag_names:
+        tag = Tag.query. filter_by(name=tag_name).first()
+        if tag is None:
+            tag = Tag(name=tag_name)
+        new_post.tags.append(tag)
 
-        db.session.add(new_post)
-        db.session.commit()
-        return {'message': 'Post Created Successfully', 'post': new_post.serialize()}, 201
+    db.session.add(new_post)
+    db.session.commit()
+    return {'message': 'Post Created Successfully', 'post': new_post.serialize()}, 201
 
 @blp.route('/posts/<int:post_id>', methods=['GET'])
-@jwt_required()
 def get_post(post_id):
     post = Post.query.get_or_404(post_id)
     post.view_count += 1
+    creator_username = post.creator.username if post.creator else None
     db.session.commit()
     return {'post': post.serialize()}, 200
 
@@ -104,28 +114,7 @@ def search_posts():
 
 @blp.route('/posts/like', methods=['POST'])
 @jwt_required()
-def like_post():
-    data = request.get_json()
-    post_id = data['post_id']
-    current_username = get_jwt_identity()
-
-    user = User.query.filter_by(username=current_username).first()
-    post = Post.query.get(post_id)
-
-    if user and post:
-        if user not in post.liked_by:
-            post.liked_by.append(user)
-            post.likes += 1
-            db.session.commit()
-            return {'message': 'Post liked successfully'}, 200
-        else:
-            return {'message': 'You have already liked this post'}, 400
-    else:
-        return {'message': 'User or post not found'}, 404
-    
-@blp.route('/posts/unlike', methods=['POST'])
-@jwt_required()
-def unlike_post():
+def toggle_like_post():
     data = request.get_json()
     post_id = data['post_id']
     current_username = get_jwt_identity()
@@ -133,12 +122,60 @@ def unlike_post():
     user = User.query.filter_by(username=current_username).first()
     post = Post.query.get_or_404(post_id)
 
-    if user.id in [user.id for user in post.liked_by]:
-        post.likes -= 1
-        post.liked_by.remove(user)
+    if user and post:
+        if user in post.liked_by:
+            # If user has already liked the post, unlike it
+            post.likes -= 1
+            post.liked_by.remove(user)
+            action_message = 'Post unliked successfully'
+        else:
+            # If user hasn't liked the post, like it
+            post.likes += 1
+            post.liked_by.append(user)
+            action_message = 'Post liked successfully'
         db.session.commit()
-        return {'message': 'Post unliked successfully'}, 200
-    
+        return {'message': action_message}, 200
     else:
-        return {'message': 'You have not liked this post yet'}, 400
+        return {'message': 'User or post not found'}, 404
+
+
+# @blp.route('/posts/like', methods=['POST'])
+# @jwt_required()
+# def like_post():
+#     data = request.get_json()
+#     post_id = data['post_id']
+#     current_username = get_jwt_identity()
+
+#     user = User.query.filter_by(username=current_username).first()
+#     post = Post.query.get(post_id)
+
+#     if user and post:
+#         if user not in post.liked_by:
+#             post.liked_by.append(user)
+#             post.likes += 1
+#             db.session.commit()
+#             return {'message': 'Post liked successfully'}, 200
+#         else:
+#             return {'message': 'You have already liked this post'}, 400
+#     else:
+#         return {'message': 'User or post not found'}, 404
+    
+# @blp.route('/posts/unlike', methods=['POST'])
+# @jwt_required()
+# def unlike_post():
+#     data = request.get_json()
+#     post_id = data['post_id']
+#     current_username = get_jwt_identity()
+
+#     user = User.query.filter_by(username=current_username).first()
+#     post = Post.query.get_or_404(post_id)
+
+#     if user.id in [user.id for user in post.liked_by]:
+#         post.likes -= 1
+#         post.liked_by.remove(user)
+#         db.session.commit()
+#         return {'message': 'Post unliked successfully'}, 200
+    
+#     else:
+#         return {'message': 'You have not liked this post yet'}, 400
 

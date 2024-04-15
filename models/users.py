@@ -19,6 +19,8 @@ class User(db.Model):
     username = db.Column(db.String(), unique=True, nullable=False)
     email = db.Column(db.String(), unique=True, nullable=False)
     password = db.Column(db.Text(), nullable=False)
+
+    authored_posts = db.relationship('Post', backref='author', lazy='dynamic')
     roles = db.relationship('Role', secondary=user_role_association, backref=db.backref('users', lazy='dynamic', cascade='all, delete'))
 
     def __repr__(self):
